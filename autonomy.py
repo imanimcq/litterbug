@@ -1,9 +1,9 @@
-from Server.motor import Ordinary_Car
-from Server.buzzer import Buzzer
-from Server.servo import Servo
-from Server.car import Car
-from Server.test import *
-from Server.ultrasonic import Ultrasonic
+from motor import Ordinary_Car
+from buzzer import Buzzer
+from servo import Servo
+from car import Car
+from test import *
+from ultrasonic import Ultrasonic
 import cv2
 import time
 from ultralytics import YOLO
