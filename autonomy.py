@@ -9,6 +9,10 @@ import time
 from ultralytics import YOLO
 MODEL_PATH = "yolo/best_ncnn_model"
 
+if (not os.path.exists(MODEL_PATH)):
+    print('ERROR: Model path is invalid or model was not found. Make sure the model filename was entered correctly.')
+    sys.exit(0)
+
 model = YOLO(MODEL_PATH)
 
 car = Car()
