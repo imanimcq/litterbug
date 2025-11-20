@@ -13,8 +13,7 @@ import threading  # Added for non-blocking buzzer operation
 from picamera2 import Picamera2
 from ultralytics import YOLO
 
-# --- Custom Hardware Modules (Assumed to be defined externally) ---
-from motor import Motor  
+# --- Custom Hardware Modules (Assumed to be defined externally) ---  
 from ultrasonic import Ultrasonic
 from motor import Ordinary_Car
 from servo import Servo
@@ -23,7 +22,7 @@ from adc import ADC
 from buzzer import Buzzer
 
 # --- CONFIGURATION ---
-model_path = 'yolo/best_ncnn_model'
+model_path = '/home/imanimcquay/Freenove_4WD_Smart_Car_Kit_for_Raspberry_Pi/Code/Server/imani_best_ncnn_model'
 img_source = 'picamera0' # NOTE: This variable is for reference only; Picamera2 is initialized below.
 min_thresh = 0.75
 user_res = "640x480"
@@ -38,17 +37,6 @@ if (not os.path.exists(model_path)):
 model = YOLO(model_path, task='detect')
 labels = model.names
 
-label_map = {
-    "0": "can", 
-    "1": "glass bottle",
-    "2": "milk carton", 
-    "3": "plastic bottle"
-}
-
-# Apply rename map to YOLO class names
-for idx, name in labels.items():
-    if name in label_map:
-        labels[idx] = label_map[name]
 
 # --- CAR CLASS DEFINITION ---
 class Car:
@@ -60,6 +48,11 @@ class Car:
         self.infrared = None
         self.adc = None
         self.buzzer = None
+        
+        self.car_record_time = time.time()
+        self.car_sonic_servo_angle = 30
+        self.car_sonic_servo_dir = 1
+        self.car_sonic_distance = [30, 30, 30]
         
         # Buzzer threading attributes for non-blocking operation
         self.buzzer_thread = None  # Reference to the active buzzer thread
@@ -76,7 +69,7 @@ class Car:
     def start(self):  
         if self.servo is None:
             self.servo = Servo()
-            self.servo.set_servo_pwm('0', 90) # Servo faces forward
+            self.servo.set_servo_pwm('0', 30) # Servo faces forward
         if self.sonic is None:
             self.sonic = Ultrasonic()
         if self.motor is None:
@@ -109,60 +102,82 @@ class Car:
         self.motor = None
         self.adc = None
         self.buzzer = None
+    
 
-    def navigate_with_obstacle_avoidance(self):
-        """
-        Simplified obstacle avoidance: ultrasonic sensor faces forward.
-        Checks distance periodically and adjusts motor speed accordingly.
-        """
-        # Only check distance at specified intervals to avoid overwhelming the sensor
-        current_time = time.time()
-        if (current_time - self.last_distance_check) < self.distance_check_interval:
-            return  # Not time to check yet
-        
-        self.last_distance_check = current_time
-        
-        # Get distance reading from forward-facing ultrasonic sensor
-        forward_distance = self.sonic.get_distance()
-        
-        # Obstacle detection thresholds (in cm)
-        CRITICAL_DISTANCE = 15   # Very close - immediate action needed
-        WARNING_DISTANCE = 30    # Getting close - slow down
-        SAFE_DISTANCE = 50       # Safe to move at normal speed
-        
-        # Decision logic based on forward distance
-        if forward_distance < CRITICAL_DISTANCE:
-            # CRITICAL: Obstacle very close ahead
-            # Stop, reverse briefly, then turn (alternate left/right)
-            print(f"CRITICAL: Obstacle at {forward_distance}cm - Reversing and turning")
-            self.motor.set_motor_model(0, 0, 0, 0)  # Stop first
-            time.sleep(0.05)
-            self.motor.set_motor_model(-600, -600, -600, -600)  # Reverse
-            time.sleep(0.3)
             
-            # Alternate turning direction each time
-            import random
-            if random.choice([True, False]):
-                # Turn right
+    def run_motor_ultrasonic(self, distance):
+
+        left, mid, right = distance
+        if (left < 30 and mid < 50 and right < 50) or mid < 50:
+            print(f"Obstacle ahead! MD = {mid} cm. Reversing")
+            self.motor.set_motor_model(-1000, -1000, -1000, -1000)
+            time.sleep(0.1)
+
+            if left < right:
+                print(f"Left obstacle closer! L = {left} cm, R = {right} cm. Turning Right")
                 self.motor.set_motor_model(1000, 1000, -1000, -1000)
+            
             else:
-                # Turn left
+                print(f"Right obstacle closer! L = {left} cm, R = {right} cm. Turning Left")
                 self.motor.set_motor_model(-1000, -1000, 1000, 1000)
-            time.sleep(0.4)
+
+
+        elif left < 50 and mid < 50:
+            print(f"Left + Middle Blocked! L = {left} cm, M = {mid} cm. Turning Right")
+            self.motor.set_motor_model(1000, 1000, -1000, -1000)
+
+        elif right < 50 and mid < 50:
+            print(f"Right + Middle Blocked! R = {right} cm, M = {mid} cm. Turning Left")
+            self.motor.set_motor_model(-1000, -1000, 1000, 1000)
+
+        elif left < 30:
+            print(f"Left Obstacle! L = {left} cm. Steering Right")
+            self.motor.set_motor_model(2000, 2000, -500, -500)
             
-        elif forward_distance < WARNING_DISTANCE:
-            # WARNING: Obstacle moderately close - slow down significantly
-            print(f"WARNING: Obstacle at {forward_distance}cm - Slowing down")
-            self.motor.set_motor_model(300, 300, 300, 300)
-            
-        elif forward_distance < SAFE_DISTANCE:
-            # CAUTION: Obstacle detected but still safe - reduce speed
-            print(f"CAUTION: Obstacle at {forward_distance}cm - Reduced speed")
-            self.motor.set_motor_model(450, 450, 450, 450)
-            
+            if left < 20:
+                print(f"Left CLOSE Obstacle! L = {left} cm. Hard Right")
+                self.motor.set_motor_model(1500, 1500, -1000, -1000)
+        
+        elif right < 30:
+            print(f"Right Obstacle! R= {right} cm. Steering Left")
+            self.motor.set_motor_model(-500, -500, 2000, 2000)
+
+            if right < 20:
+                print(f"Right CLOSE Obstacle! R = {right} cm. Hard Left")
+                self.motor.set_motor_model(-1500, -1500, 1500, 1500)
+        
         else:
-            # CLEAR: No obstacles nearby - move at normal speed
+            print(f"Clear path. Moving forward. L = {left} cm, M = {mid} cm, R = {right} cm")
             self.motor.set_motor_model(600, 600, 600, 600)
+
+    def mode_ultrasonic(self):
+        if (time.time() - self.car_record_time) > 0.25:
+            self.car_record_time = time.time()
+            self.servo.set_servo_pwm('0', self.car_sonic_servo_angle)
+            if self.car_sonic_servo_angle == -90:
+                self.car_sonic_distance[0] = self.sonic.get_distance()
+            elif self.car_sonic_servo_angle == 0:
+                self.car_sonic_distance[1] = self.sonic.get_distance()
+            elif self.car_sonic_servo_angle == 90:
+                self.car_sonic_distance[2] = self.sonic.get_distance()
+            print("L:{}, M:{}, R:{}".format(self.car_sonic_distance[0], self.car_sonic_distance[1], self.car_sonic_distance[2]))
+            self.run_motor_ultrasonic(self.car_sonic_distance)
+            if self.car_sonic_servo_angle <= -90:
+                self.car_sonic_servo_dir = 1
+            elif self.car_sonic_servo_angle >= 90:
+                self.car_sonic_servo_dir = 0
+            if self.car_sonic_servo_dir == 1:
+                self.car_sonic_servo_angle += 30
+            elif self.car_sonic_servo_dir == 0:
+                self.car_sonic_servo_angle -= 30
+
+    def detect_object(self, num_object):
+        if num_object <= 0:
+            return
+        else: 
+            self.motor.set_motor_model(0, 0, 0, 0)
+            time.sleep(5.0)
+
     
     def sound_buzzer(self, duration=2.0):
         """
@@ -254,9 +269,8 @@ car = Car()
 # --- MAIN PROCESSING LOOP ---
 try: 
     while True: 
-
-        # Run obstacle avoidance (now simplified - no servo sweeping)
-        car.navigate_with_obstacle_avoidance()
+        
+        car.mode_ultrasonic()
 
         # Capture frame-by-frame
         t_start = time.perf_counter()
@@ -309,6 +323,7 @@ try:
         # This now runs in background thread, so it won't slow down the main loop
         if object_count > 0:
             buzzer_started = car.sound_buzzer(2.0)
+            car.detect_object(object_count)
             if buzzer_started:
                 print(f"Object(s) detected! Count: {object_count}. Buzzer activated.")
             else:
@@ -341,7 +356,7 @@ try:
         # Calculate average FPS for past frames
         avg_frame_rate = np.mean(frame_rate_buffer)
 
-        print(f'Average pipeline FPS: {avg_frame_rate:.2f}')
+        # print(f'Average pipeline FPS: {avg_frame_rate:.2f}')
 
 except KeyboardInterrupt:
     car.close()
