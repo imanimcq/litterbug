@@ -22,9 +22,9 @@ from adc import ADC
 from buzzer import Buzzer
 
 # --- CONFIGURATION ---
-model_path = '/home/imanimcquay/Freenove_4WD_Smart_Car_Kit_for_Raspberry_Pi/Code/Server/imani_best_ncnn_model'
+model_path = '/home/imanimcquay/Freenove_4WD_Smart_Car_Kit_for_Raspberry_Pi/Code/Server/mahica_best_ncnn_model'
 img_source = 'picamera0' # NOTE: This variable is for reference only; Picamera2 is initialized below.
-min_thresh = 0.75
+min_thresh = 0.65
 user_res = "640x480"
 record = False # Currently disabled
 
@@ -103,73 +103,50 @@ class Car:
         self.adc = None
         self.buzzer = None
     
-
-            
+ 
     def run_motor_ultrasonic(self, distance):
-
-        left, mid, right = distance
-        if (left < 30 and mid < 50 and right < 50) or mid < 50:
-            print(f"Obstacle ahead! MD = {mid} cm. Reversing")
-            self.motor.set_motor_model(-1000, -1000, -1000, -1000)
-            time.sleep(0.1)
-
-            if left < right:
-                print(f"Left obstacle closer! L = {left} cm, R = {right} cm. Turning Right")
-                self.motor.set_motor_model(1000, 1000, -1000, -1000)
-            
-            else:
-                print(f"Right obstacle closer! L = {left} cm, R = {right} cm. Turning Left")
-                self.motor.set_motor_model(-1000, -1000, 1000, 1000)
-
-
-        elif left < 50 and mid < 50:
-            print(f"Left + Middle Blocked! L = {left} cm, M = {mid} cm. Turning Right")
-            self.motor.set_motor_model(1000, 1000, -1000, -1000)
-
-        elif right < 50 and mid < 50:
-            print(f"Right + Middle Blocked! R = {right} cm, M = {mid} cm. Turning Left")
-            self.motor.set_motor_model(-1000, -1000, 1000, 1000)
-
-        elif left < 30:
-            print(f"Left Obstacle! L = {left} cm. Steering Right")
-            self.motor.set_motor_model(2000, 2000, -500, -500)
-            
-            if left < 20:
-                print(f"Left CLOSE Obstacle! L = {left} cm. Hard Right")
-                self.motor.set_motor_model(1500, 1500, -1000, -1000)
-        
-        elif right < 30:
-            print(f"Right Obstacle! R= {right} cm. Steering Left")
-            self.motor.set_motor_model(-500, -500, 2000, 2000)
-
-            if right < 20:
-                print(f"Right CLOSE Obstacle! R = {right} cm. Hard Left")
-                self.motor.set_motor_model(-1500, -1500, 1500, 1500)
-        
-        else:
-            print(f"Clear path. Moving forward. L = {left} cm, M = {mid} cm, R = {right} cm")
-            self.motor.set_motor_model(600, 600, 600, 600)
+        if (distance[0] < 30 and distance[1] < 30 and distance[2] <30) or distance[1] < 30 :
+            self.motor.set_motor_model(-1450,-1450,-1450,-1450) 
+            time.sleep(0.1)   
+            if distance[0] < distance[2]:
+                self.motor.set_motor_model(1450,1450,-1450,-1450)
+            else :
+                self.motor.set_motor_model(-1450,-1450,1450,1450)
+        elif distance[0] < 30 and distance[1] < 30:
+            self.motor.set_motor_model(1500,1500,-1500,-1500)
+        elif distance[2] < 30 and distance[1] < 30:
+            self.motor.set_motor_model(-1500,-1500,1500,1500)
+        elif distance[0] < 20 :
+            self.motor.set_motor_model(2000,2000,-500,-500)
+            if distance[0] < 10 :
+                self.motor.set_motor_model(1500,1500,-1000,-1000)
+        elif distance[2] < 20 :
+            self.motor.set_motor_model(-500,-500,2000,2000)
+            if distance[2] < 10 :
+                self.motor.set_motor_model(-1500,-1500,1500,1500)
+        else :
+            self.motor.set_motor_model(600,600,600,600)
 
     def mode_ultrasonic(self):
         if (time.time() - self.car_record_time) > 0.25:
             self.car_record_time = time.time()
             self.servo.set_servo_pwm('0', self.car_sonic_servo_angle)
-            if self.car_sonic_servo_angle == -90:
+            if self.car_sonic_servo_angle == 30:
                 self.car_sonic_distance[0] = self.sonic.get_distance()
-            elif self.car_sonic_servo_angle == 0:
-                self.car_sonic_distance[1] = self.sonic.get_distance()
             elif self.car_sonic_servo_angle == 90:
+                self.car_sonic_distance[1] = self.sonic.get_distance()
+            elif self.car_sonic_servo_angle == 150:
                 self.car_sonic_distance[2] = self.sonic.get_distance()
             print("L:{}, M:{}, R:{}".format(self.car_sonic_distance[0], self.car_sonic_distance[1], self.car_sonic_distance[2]))
             self.run_motor_ultrasonic(self.car_sonic_distance)
-            if self.car_sonic_servo_angle <= -90:
+            if self.car_sonic_servo_angle <= 30:
                 self.car_sonic_servo_dir = 1
-            elif self.car_sonic_servo_angle >= 90:
+            elif self.car_sonic_servo_angle >= 150:
                 self.car_sonic_servo_dir = 0
             if self.car_sonic_servo_dir == 1:
-                self.car_sonic_servo_angle += 30
+                self.car_sonic_servo_angle += 60
             elif self.car_sonic_servo_dir == 0:
-                self.car_sonic_servo_angle -= 30
+                self.car_sonic_servo_angle -= 60
 
     def detect_object(self, num_object):
         if num_object <= 0:
