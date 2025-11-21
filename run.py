@@ -105,48 +105,90 @@ class Car:
     
  
     def run_motor_ultrasonic(self, distance):
-        if (distance[0] < 30 and distance[1] < 30 and distance[2] <30) or distance[1] < 30 :
+        L, M, R = distance[0], distance[1], distance[2]
+
+        # Print current distances
+        print(f"[DISTANCES] Left: {L:.1f} cm | Middle: {M:.1f} cm | Right: {R:.1f} cm")
+
+        # --- MAIN OBSTACLE CONDITION ---
+        if (L < 30 and M < 30 and R < 30) or M < 30:
+            print("[ACTION] Obstacle detected in FRONT. Reversing.")
             self.motor.set_motor_model(-1450,-1450,-1450,-1450) 
-            time.sleep(0.1)   
-            if distance[0] < distance[2]:
+            time.sleep(0.1)
+
+            if L < R:
+                print("[TURN] Turning RIGHT after reversing.")
                 self.motor.set_motor_model(1450,1450,-1450,-1450)
-            else :
+            else:
+                print("[TURN] Turning LEFT after reversing.")
                 self.motor.set_motor_model(-1450,-1450,1450,1450)
-        elif distance[0] < 30 and distance[1] < 30:
+
+        # --- LEFT & MIDDLE BLOCKED ---
+        elif L < 30 and M < 30:
+            print("[ACTION] Obstacle on LEFT + FRONT → Turning RIGHT.")
             self.motor.set_motor_model(1500,1500,-1500,-1500)
-        elif distance[2] < 30 and distance[1] < 30:
+
+        # --- RIGHT & MIDDLE BLOCKED ---
+        elif R < 30 and M < 30:
+            print("[ACTION] Obstacle on RIGHT + FRONT → Turning LEFT.")
             self.motor.set_motor_model(-1500,-1500,1500,1500)
-        elif distance[0] < 20 :
+
+        # --- LEFT CLOSE ---
+        elif L < 20:
+            print("[ACTION] Obstacle on LEFT → Sliding RIGHT.")
             self.motor.set_motor_model(2000,2000,-500,-500)
-            if distance[0] < 10 :
+            if L < 10:
+                print("[ACTION] LEFT extremely close → HARD RIGHT TURN.")
                 self.motor.set_motor_model(1500,1500,-1000,-1000)
-        elif distance[2] < 20 :
+
+        # --- RIGHT CLOSE ---
+        elif R < 20:
+            print("[ACTION] Obstacle on RIGHT → Sliding LEFT.")
             self.motor.set_motor_model(-500,-500,2000,2000)
-            if distance[2] < 10 :
+            if R < 10:
+                print("[ACTION] RIGHT extremely close → HARD LEFT TURN.")
                 self.motor.set_motor_model(-1500,-1500,1500,1500)
-        else :
+
+        # --- CLEAR PATH ---
+        else:
+            print("[ACTION] Path clear → Moving FORWARD.")
             self.motor.set_motor_model(600,600,600,600)
+
+
 
     def mode_ultrasonic(self):
         if (time.time() - self.car_record_time) > 0.25:
             self.car_record_time = time.time()
             self.servo.set_servo_pwm('0', self.car_sonic_servo_angle)
+
+            # Read distances based on servo angle
             if self.car_sonic_servo_angle == 30:
                 self.car_sonic_distance[0] = self.sonic.get_distance()
             elif self.car_sonic_servo_angle == 90:
                 self.car_sonic_distance[1] = self.sonic.get_distance()
             elif self.car_sonic_servo_angle == 150:
                 self.car_sonic_distance[2] = self.sonic.get_distance()
-            print("L:{}, M:{}, R:{}".format(self.car_sonic_distance[0], self.car_sonic_distance[1], self.car_sonic_distance[2]))
+
+            # Print current scan angle
+            print(f"[SCAN] Servo at {self.car_sonic_servo_angle}° → "
+                f"L:{self.car_sonic_distance[0]:.1f}  "
+                f"M:{self.car_sonic_distance[1]:.1f}  "
+                f"R:{self.car_sonic_distance[2]:.1f}")
+
+            # Motor decision
             self.run_motor_ultrasonic(self.car_sonic_distance)
+
+            # Sweep direction update
             if self.car_sonic_servo_angle <= 30:
                 self.car_sonic_servo_dir = 1
             elif self.car_sonic_servo_angle >= 150:
                 self.car_sonic_servo_dir = 0
+            
             if self.car_sonic_servo_dir == 1:
                 self.car_sonic_servo_angle += 60
             elif self.car_sonic_servo_dir == 0:
                 self.car_sonic_servo_angle -= 60
+
 
     def detect_object(self, num_object):
         if num_object <= 0:
